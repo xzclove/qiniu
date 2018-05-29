@@ -32,7 +32,6 @@ public class MainWindow {
     private Logger logger = Logger.getLogger(MainWindow.class);
 
     public MainWindow() {
-
     }
 
     public static void setOnClosed(Event event, boolean isExternalCall) {

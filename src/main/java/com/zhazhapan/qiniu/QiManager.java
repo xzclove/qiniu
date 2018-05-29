@@ -25,6 +25,7 @@ import org.apache.log4j.Logger;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 
@@ -408,11 +409,15 @@ public class QiManager {
                 String time = Formatter.timeStampToString(item.putTime / 10000);
                 String size = Formatter.formatSize(item.fsize);
                 FileInfo file = new FileInfo(item.key, item.mimeType, size, time);
+                file.setPutTime(item.putTime);
                 files.add(file);
                 logger.info("file name: " + item.key + ", file type: " + item.mimeType + ", file size: " + size + ", " +
                         "" + "" + "" + "" + "" + "" + "" + "" + "" + "" + "" + "" + "" + "" + "file time: " + time);
             }
         }
+        // 日期降序
+        Collections.sort(files);
+
         QiniuApplication.data = FXCollections.observableArrayList(files);
     }
 

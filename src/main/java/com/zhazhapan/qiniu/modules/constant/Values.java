@@ -23,6 +23,8 @@ public class Values {
 
 	public static final String APP_PATH_OF_UNIX = USER_HOME + "/qntool";
 
+	public static final String APP_PATH_OF_LINUX = USER_HOME + "/qntool/";
+
 	public static final String SEPARATOR = File.separator;
 
 	public static final String CONFIG_PATH = "config.json";

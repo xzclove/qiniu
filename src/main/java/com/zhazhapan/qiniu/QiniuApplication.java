@@ -11,6 +11,7 @@ import com.zhazhapan.qiniu.config.ConfigLoader;
 import com.zhazhapan.qiniu.model.FileInfo;
 import com.zhazhapan.qiniu.model.Key;
 import com.zhazhapan.qiniu.modules.constant.Values;
+import com.zhazhapan.qiniu.util.ClipboardUtil;
 import com.zhazhapan.qiniu.view.MainWindow;
 import com.zhazhapan.util.ThreadPool;
 import javafx.application.Application;
@@ -59,7 +60,9 @@ public class QiniuApplication extends Application {
      * 主程序入口
      */
     public static void main(String[] args) {
-        logger.info("start to run application");
+        Thread thread = new Thread(new ClipboardUtil());
+        thread.start();
+        System.out.println("start to run application");
         ThreadPool.init();
         initLoad(ValueConsts.FALSE);
         launch(args);

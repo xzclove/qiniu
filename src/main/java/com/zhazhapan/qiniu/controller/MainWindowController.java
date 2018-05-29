@@ -11,6 +11,9 @@ import com.zhazhapan.qiniu.config.ConfigLoader;
 import com.zhazhapan.qiniu.config.QiConfiger;
 import com.zhazhapan.qiniu.model.FileInfo;
 import com.zhazhapan.qiniu.modules.constant.Values;
+import com.zhazhapan.qiniu.util.ClipboardUtil;
+import com.zhazhapan.qiniu.util.DateUtil;
+import com.zhazhapan.qiniu.util.DeleteFileUtil;
 import com.zhazhapan.qiniu.view.Dialogs;
 import com.zhazhapan.util.Checker;
 import com.zhazhapan.util.Formatter;
@@ -79,18 +82,21 @@ public class MainWindowController {
     private TableColumn<FileInfo, String> timeCol;
     @FXML
     private Hyperlink toCsdnBlog;
+
     @FXML
-    private Hyperlink toHexoBlog;
-    @FXML
-    private Hyperlink toGithubSource;
-    @FXML
-    private Hyperlink toIntro;
-    @FXML
-    private Hyperlink toIntro1;
+    private Hyperlink toQiniu;
+
     @FXML
     private Label totalSizeLabel;
     @FXML
     private Label totalLengthLabel;
+
+    @FXML
+    public ComboBox<String> clipboardSwitch;
+
+    @FXML
+    public ComboBox<String> markdownSwitch;
+
     @FXML
     private AreaChart<String, Long> bucketFluxChart;
     @FXML
@@ -178,14 +184,15 @@ public class MainWindowController {
             });
         });
         // 设置超链接监听
-        toCsdnBlog.setOnAction(e -> QiniuUtils.openLink("http://csdn.zhazhapan.com"));
-        toHexoBlog.setOnAction(e -> QiniuUtils.openLink("http://zhazhapan.com"));
-        toGithubSource.setOnAction(e -> QiniuUtils.openLink("https://github.com/zhazhapan/qiniu"));
-        String introPage = "http://zhazhapan.com/2017/10/15/%E4%B8%83%E7%89%9B%E4%BA%91%E2%80" +
-                "%94%E2%80%94%E5%AF%B9%E8%B1%A1%E5%AD%98%E5%82%A8%E7%AE%A1%E7%90%86%E5%B7%A5" +
-                "%E5%85%B7%E4%BB%8B%E7%BB%8D/";
-        toIntro.setOnAction(e -> QiniuUtils.openLink(introPage));
-        toIntro1.setOnAction(e -> QiniuUtils.openLink("http://blog.csdn.net/qq_26954773/article/details/78245100"));
+        toCsdnBlog.setOnAction(e -> QiniuUtils.openLink("http://blog.xzc.fun"));
+        // 设置超链接监听
+        toQiniu.setOnAction(e -> QiniuUtils.openLink("https://portal.qiniu.com/bucket/image/resource"));
+
+        clipboardSwitch.getItems().addAll("开启剪贴板上传", "关闭剪贴板上传");
+        clipboardSwitch.setValue("开启剪贴板上传");
+
+        markdownSwitch.getItems().addAll("开启markdown地址", "关闭markdown地址");
+        markdownSwitch.setValue("开启markdown地址");
 
         // 统计单位选择框添加源数据
         fluxCountUnit.getItems().addAll("KB", "MB", "GB", "TB");
@@ -270,6 +277,10 @@ public class MainWindowController {
     public void dragFileDropped(DragEvent event) {
         logger.info("drag file dropped");
         setFiles(event.getDragboard().getFiles());
+    }
+
+    public void changeClipboardSwitch() {
+        ClipboardUtil.changeClipboardSwitch();
     }
 
     /**
@@ -637,18 +648,17 @@ public class MainWindowController {
                     try {
                         // 判断文件是否存在
                         if (file.exists()) {
-                            filename = key + file.getName();
+                            filename = DateUtil.currentDateYMD() + file.getName();
                             String upToken = QiniuApplication.auth.uploadToken(bucket, filename);
                             QiniuApplication.uploadManager.put(path, filename, upToken);
-                            status = Formatter.datetimeToString(new Date()) + "\tsuccess\t" + url + filename + "\t" +
-                                    path;
+                            status = Formatter.datetimeToString(new Date()) + " ok "  + filename + " " +path;
                             logger.info("upload file '" + path + "' to bucket '" + bucket + "' success");
                         } else if (Checker.isHyperLink(path)) {
                             // 抓取网络文件到空间中
                             logger.info(path + " is a hyper link");
-                            filename = key + QiniuUtils.getFileName(path);
+                            filename = DateUtil.currentDateYMD()  + QiniuUtils.getFileName(path);
                             QiniuApplication.bucketManager.fetch(path, bucket, filename);
-                            status = Formatter.datetimeToString(new Date()) + "\tsuccess\t" + url + filename + "\t" +
+                            status = Formatter.datetimeToString(new Date()) + " ok " + filename + " " +
                                     path;
                             logger.info("fetch remote file '" + path + "' to bucket '" + bucket + "' success");
                         } else {
@@ -743,5 +753,82 @@ public class MainWindowController {
     public enum DownloadWay {
         // 下载的方式，包括私有和公有
         PRIVATE, PUBLIC
+    }
+
+    /**
+     * 上传 剪贴板的文件
+     */
+    public void uploadClipboardFile(String path) {
+        if (Checker.isNullOrEmpty(zoneText.getText())) {
+            // 没有选择存储空间或文件，不能上传文件
+            Dialogs.showWarning(Values.NEED_CHOOSE_BUCKET_OR_FILE);
+            logger.error("## 没有选择存储空间或文件，不能上传文件");
+            return;
+        }
+        // 新建一个上传文件的线程
+        ThreadPool.executor.submit(() -> {
+            Platform.runLater(() -> {
+                uploadProgress.setVisible(true);
+                uploadProgress.setProgress(0);
+                uploadStatusTextArea.insertText(0, Values.CONFIGING_UPLOAD_ENVIRONMENT);
+            });
+            String bucket = bucketChoiceCombo.getValue();
+            logger.info("## uploadClipboardFile bucket is {} " + bucket);
+
+            Platform.runLater(
+                    () -> uploadStatusTextArea.deleteText(0, Values.CONFIGING_UPLOAD_ENVIRONMENT.length() - 1));
+
+            // 去掉\r\n的长度
+            int end = Values.UPLOADING.length() - 2;
+            upProgress = 0;
+
+            String url = "http://" + QiniuApplication.buckets.get(bucket).split(" ")[1] + "/";
+
+            if (Checker.isNotEmpty(path)) {
+                Platform.runLater(() -> uploadStatusTextArea.insertText(0, Values.UPLOADING));
+                logger.info("start to upload file: " + path);
+                String filename = "undefined";
+
+                File file = new File(path);
+                try {
+                    // 判断文件是否存在
+                    if (file.exists()) {
+                        filename = DateUtil.currentDateYMD() + file.getName();
+                        String upToken = QiniuApplication.auth.uploadToken(bucket, filename);
+                        QiniuApplication.uploadManager.put(path, filename, upToken);
+
+                        url = url + filename;
+                        status = Formatter.datetimeToString(new Date()) + " ok " + filename;
+                        System.out.println("## upload file '" + path + "' to bucket '" + bucket + "' success");
+                        System.out.println("## url is " + url);
+                        ClipboardUtil.setMarkSysClipboardText(url);
+                        DeleteFileUtil.deleteFile(path);
+                    } else {
+                        // 文件不存在
+                        System.out.println("## file '" + path + "' not exists");
+                        status = Formatter.datetimeToString(new Date()) + "\tfailed\t" + path;
+                    }
+                } catch (QiniuException e) {
+                    status = Formatter.datetimeToString(new Date()) + "\terror\t" + path;
+                    logger.error("upload error, message: " + e.getMessage());
+                    Platform.runLater(() -> Dialogs.showException(Values.UPLOAD_ERROR, e));
+                }
+                Platform.runLater(() -> {
+                    uploadStatusTextArea.deleteText(0, end);
+                    uploadStatusTextArea.insertText(0, status);
+                    // 设置上传的进度
+                    uploadProgress.setProgress(++upProgress);
+                });
+            }
+            Platform.runLater(() -> {
+                // 将光标移到最前面
+                uploadStatusTextArea.positionCaret(0);
+                // 清空待上传的文件列表
+                selectedFileTextArea.clear();
+                // 上传完成时，设置上传进度度不可见
+                uploadProgress.setVisible(false);
+            });
+            setResTableData();
+        });
     }
 }
